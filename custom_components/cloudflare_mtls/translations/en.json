@@ -3,61 +3,51 @@
     "step": {
       "user": {
         "title": "Cloudflare client certificates",
-        "description": "Gives every Home Assistant app install its own client certificate and revokes it when the install is removed.\n\nPaste a Cloudflare API token. The integration checks what the token can do and picks the setup that fits:\n\n- **Automatic:** a token with broad access (for example, all permissions on the account). The integration sets up Cloudflare for you, then restricts its own token to client certificates if it's allowed to edit itself. [Pre-filled setup token]({setup_url}): add **Cloudflare Tunnel: Edit** for the tunnel route, and **API Tokens: Edit** so it can restrict itself.\n- **Manual:** a token with only **SSL and Certificates: Edit** on your zone, after you've set up Cloudflare yourself. The integration checks that setup.",
+        "description": "- **Automatic:** a token with broad access, for example all permissions on the account. [Pre-filled setup token]({setup_url}): add **Cloudflare Tunnel: Edit** for the tunnel route, and **API Tokens: Edit** so it can restrict itself.\n- **Manual:** a token with only **SSL and Certificates: Edit** on your zone, after you've set up Cloudflare yourself.",
         "data": {
           "api_token": "API token"
-        },
-        "data_description": {
-          "api_token": "Cloudflare API token. It is checked before anything is saved."
         }
       },
       "zone": {
         "title": "Choose the zone",
-        "description": "The token can reach more than one zone. Pick the one that serves Home Assistant.",
         "data": {
           "zone_id": "Zone"
         }
       },
       "reconfigure": {
         "title": "Cloudflare client certificates",
-        "description": "Replace the Cloudflare API token or change the hostname.",
         "data": {
           "api_token": "API token",
           "hostname": "Hostname"
         },
         "data_description": {
-          "api_token": "Needs SSL and Certificates: Edit on the zone.",
-          "hostname": "The hostname that requires client certificates. It's used to check that mTLS stays on."
+          "api_token": "Needs SSL and Certificates: Edit on the zone."
         }
       },
       "automatic": {
         "title": "Automatic setup",
-        "description": "This token has broad access, so the integration will set up Cloudflare for you: require client certificates on the hostname, add a WAF rule that blocks requests without a valid certificate{tunnel}. Then it will {after}.\n\n{error}",
+        "description": "The integration will require client certificates on the hostname, add a WAF rule that blocks requests without a valid certificate{tunnel}. Then it will {after}.\n\n{error}",
         "data": {
           "hostname": "Hostname",
-          "block_mcp": "Also block Home Assistant's MCP endpoint (/api/mcp) on this hostname",
-          "tunnel": "Route the hostname through this tunnel",
-          "service": "Home Assistant address, as seen by the tunnel connector"
+          "block_mcp": "Block /api/mcp",
+          "tunnel": "Tunnel",
+          "service": "Service URL"
         },
         "data_description": {
-          "hostname": "The address the app uses from outside, in {zone}. Any name in the zone works.",
-          "tunnel": "Adds the hostname to the tunnel's public hostnames and creates its DNS record. An existing DNS record is never changed.",
-          "service": "Where cloudflared reaches Home Assistant, for example http://localhost:8123 if it runs on the same host."
+          "tunnel": "An existing DNS record is never changed.",
+          "service": "e.g. http://localhost:8123"
         }
       },
       "manual": {
         "title": "Manual setup",
-        "description": "This token can only manage client certificates, so Cloudflare has to be set up by hand: route the hostname to Home Assistant, require client certificates on it, and add the WAF rule from the documentation. Once you enter the hostname, the integration checks that setup.\n\nTo have the integration do all this, go back and use a token with broad access instead ([pre-filled setup token]({setup_url})).",
+        "description": "This token can only manage client certificates. Set up the route, mTLS and WAF rule yourself, or use a broad token ([pre-filled setup token]({setup_url})).",
         "data": {
           "hostname": "Hostname"
-        },
-        "data_description": {
-          "hostname": "The address the app uses from outside, in {zone}."
         }
       },
       "manual_check": {
         "title": "Manual setup: check",
-        "description": "{report}\n\nYou can finish now and fix any warnings in Cloudflare later. Repairs will also tell you if client certificates stop being required on the hostname."
+        "description": "{report}"
       }
     },
     "error": {
@@ -80,14 +70,14 @@
         "step": {
           "token": {
             "title": "Restrict the Cloudflare token",
-            "description": "The Cloudflare token can do more than this integration needs ({extras}). Setup is finished, so swap it for a token that can only manage client certificates.\n\n1. [Create the restricted token]({url}). The form is pre-filled with **SSL and Certificates: Edit** on this zone.\n2. Paste it below.\n3. Delete the old token in the Cloudflare dashboard.",
+            "description": "The Cloudflare token can do more than this integration needs ({extras}).\n\n1. [Create a restricted token]({url}).\n2. Paste it below.\n3. Delete the old token in the Cloudflare dashboard.",
             "data": {
               "api_token": "Restricted API token"
             }
           },
           "choose": {
             "title": "Restrict the Cloudflare token",
-            "description": "The Cloudflare token can do more than this integration needs. It can also rewrite its own permissions.",
+            "description": "The Cloudflare token can do more than this integration needs.",
             "menu_options": {
               "restrict": "Restrict this token to client certificates",
               "token": "Use a different, restricted token"
@@ -95,7 +85,7 @@
           },
           "restrict": {
             "title": "Restrict the Cloudflare token",
-            "description": "The token will rewrite its own permissions to **SSL and Certificates: Edit** on {zone} and lose everything else, including the ability to change itself. The token value stays the same.\n\n{error}"
+            "description": "The token will rewrite its own permissions to **SSL and Certificates: Edit** on {zone} and lose everything else, including the ability to change itself.\n\n{error}"
           }
         },
         "error": {
@@ -111,7 +101,7 @@
         "step": {
           "confirm": {
             "title": "Require client certificates on {host}",
-            "description": "Cloudflare isn't asking for client certificates on {host}, so the app's certificate isn't checked and the WAF rule blocks every request. Submit to turn mTLS back on for this hostname.\n\n{error}"
+            "description": "Cloudflare isn't asking for client certificates on {host}, so the app's certificate isn't checked and the WAF rule blocks every request.\n\n{error}"
           }
         },
         "error": {
@@ -126,8 +116,7 @@
       "description": "Issues a new client certificate for an app install, revokes its previous one and sends the device a download link (local network only).",
       "fields": {
         "device_id": {
-          "name": "Device",
-          "description": "A device registered by the Home Assistant app."
+          "name": "Device"
         }
       }
     },
@@ -136,22 +125,19 @@
       "description": "Revokes the client certificate of an app install.",
       "fields": {
         "device_id": {
-          "name": "Device",
-          "description": "A device registered by the Home Assistant app."
+          "name": "Device"
         }
       }
     },
     "adopt": {
       "name": "Adopt certificate",
-      "description": "Records a client certificate created elsewhere, such as in the Cloudflare dashboard, as this device's, so it is revoked when the device is removed.",
+      "description": "Records a client certificate created elsewhere as this device's, so it is revoked when the device is removed.",
       "fields": {
         "device_id": {
-          "name": "Device",
-          "description": "A device registered by the Home Assistant app."
+          "name": "Device"
         },
         "certificate_id": {
-          "name": "Certificate ID",
-          "description": "The certificate's ID in Cloudflare."
+          "name": "Certificate ID"
         }
       }
     },

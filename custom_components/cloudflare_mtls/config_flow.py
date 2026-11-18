@@ -1,13 +1,4 @@
-"""Config flow for Cloudflare mTLS.
-
-Two paths, chosen from what the pasted token can do:
-
-  automatic  the token can manage mTLS hostnames and WAF rules: the integration
-             configures Cloudflare itself (and a tunnel route, if asked), then
-             restricts its own token when it is allowed to
-  manual     the token can only manage client certificates: the user has set up
-             Cloudflare by hand, and the integration checks that setup
-"""
+"""Config flow for Cloudflare mTLS."""
 
 from __future__ import annotations
 
@@ -55,8 +46,6 @@ class CloudflareMtlsConfigFlow(ConfigFlow, domain=DOMAIN):
     @property
     def _account_id(self) -> str | None:
         return self._zone.get("account", {}).get("id")
-
-    # --- token and zone ---------------------------------------------------------
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
@@ -118,8 +107,6 @@ class CloudflareMtlsConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
-    # --- automatic --------------------------------------------------------------
-
     async def async_step_automatic(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         caps, zone = self._caps, self._zone["name"]
         can_route = bool(caps.tunnels and caps.dns)
@@ -178,8 +165,6 @@ class CloudflareMtlsConfigFlow(ConfigFlow, domain=DOMAIN):
         # Last, since it takes away the permissions the steps above need
         if self._caps.can_restrict:
             await api.restrict_self(self._account_id, zone_id)
-
-    # --- manual -----------------------------------------------------------------
 
     async def async_step_manual(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         zone = self._zone["name"]
@@ -241,8 +226,6 @@ class CloudflareMtlsConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({}),
             description_placeholders={"report": "\n".join(f"- {line}" for line in self._report)},
         )
-
-    # --- reconfigure ------------------------------------------------------------
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         entry = self._get_reconfigure_entry()

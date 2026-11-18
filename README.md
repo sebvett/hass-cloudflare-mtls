@@ -4,10 +4,6 @@ Put Home Assistant behind Cloudflare with **mutual TLS** and let the companion a
 through automatically: every app install gets its own client certificate when it
 first registers, and loses it when the install is removed.
 
-Cloudflare Access can't protect the companion app, which can't complete an Access
-login. A client certificate works, because the app presents one when the server asks for it. Zone-level mTLS with the
-Cloudflare-managed CA is available on **all Cloudflare plans**, including Free.
-
 ## How it works
 
 1. A phone installs the Home Assistant app and signs in **on the local network**.
@@ -16,26 +12,14 @@ Cloudflare-managed CA is available on **all Cloudflare plans**, including Free.
    password-protected `.p12`.
 3. The phone gets a notification: **Remote access certificate → Install**. The link
    opens a one-time page on Home Assistant's *local* URL that shows the password and
-   offers the download. The push carries only the link, never the password or the file.
-4. The user installs the certificate; from then on the app connects through
-   Cloudflare from anywhere.
-5. When the device is removed from Home Assistant (Settings → Devices & services →
+   offers the download.
+4. When the device is removed from Home Assistant (Settings → Devices & services →
    Mobile App → device → Delete), its certificate is revoked in Cloudflare.
-
-The download page:
-
-- answers only local client addresses (as Home Assistant sees them after
-  reverse-proxy handling), and refuses any request carrying Cloudflare headers, so
-  it can't be reached through Cloudflare even with a valid certificate
-- expires after 24 hours, or 10 minutes after the file is downloaded
-
-Each device has its own certificate, so a lost phone is cut off by deleting that one
-device. Nobody else has to re-enrol. Home Assistant's own login still applies on top.
 
 ## Requirements
 
 - Home Assistant 2026.11 or later
-- A Cloudflare zone serving Home Assistant (for example through a Cloudflare Tunnel)
+- A Cloudflare zone serving Home Assistant
 - Home Assistant configured to trust your reverse proxy (Settings → System →
   Network: *Trust X-Forwarded-For* and *Trusted proxies*)
 
@@ -51,32 +35,25 @@ device. Nobody else has to re-enrol. Home Assistant's own login still applies on
 ## Setup
 
 Add the integration under Settings → Devices & services → Add integration →
-**Cloudflare mTLS** and paste a Cloudflare API token. The integration checks what
-the token can do, picks one of two setups, and tells you which one it chose. If the
-token can see more than one zone, it asks which zone to use first.
+**Cloudflare mTLS** and paste a Cloudflare API token.
 
 ### Automatic: paste a broad token
 
 Use a token with broad access, for example one with all permissions on the account.
 At a minimum it needs **SSL and Certificates: Edit**, **Firewall Services: Edit**
-and **Zone: Read**; the setup dialog links to a pre-filled token form. Add **DNS:
-Edit** and **Cloudflare Tunnel: Edit** for the tunnel route, and **API Tokens:
-Edit** so the token can restrict itself.
+and **Zone: Read**. Add **DNS: Edit** and **Cloudflare Tunnel: Edit** for the
+tunnel route, and **API Tokens: Edit** so the token can restrict itself.
 
-You choose the hostname (`hass.<zone>` is suggested) and, if the token can see your
-remotely managed tunnels, which tunnel should route it. The integration then:
+The integration then:
 
-1. requires client certificates on the hostname (mTLS with the Cloudflare-managed CA)
+1. requires client certificates on the hostname
 2. adds a WAF custom rule that blocks requests without a valid, unrevoked
    certificate, and optionally Home Assistant's `/api/mcp` on that hostname
 3. adds the hostname to the tunnel's public hostnames and creates its DNS record
-   (an existing DNS record is never changed)
-4. **restricts its own token** to **SSL and Certificates: Edit** on that zone. The
-   token value stays the same, so nothing else needs updating.
+4. **restricts its own token** to **SSL and Certificates: Edit** on that zone
 
 If the token isn't allowed to edit itself, **Repairs** asks you to swap it for a
-restricted one afterwards. The repair links to a pre-filled token form and checks
-that the new token really is restricted.
+restricted one afterwards.
 
 ### Manual: set up Cloudflare yourself
 
@@ -85,7 +62,7 @@ Cloudflare by hand:
 
 1. Route the hostname to Home Assistant (for example as a tunnel public hostname).
 2. SSL/TLS → Client Certificates → Hosts: add the hostname.
-3. Security → WAF → Custom rules: add a rule with action *Block*:
+3. Security → Security rules → Create rule → Custom rules: action *Block*, expression:
 
    ```
    (http.host eq "hass.example.com" and (not cf.tls_client_auth.cert_verified or cf.tls_client_auth.cert_revoked))
@@ -94,20 +71,13 @@ Cloudflare by hand:
    `cert_verified` stays true for revoked certificates, so keep the `cert_revoked`
    check. Without the rule, mTLS alone doesn't block anything.
 
-When you enter the hostname, the integration checks the setup and reports back:
-
-- whether client certificates are required on the hostname (it turns this on if they
-  aren't, which the restricted token is allowed to do)
-- whether a request without a certificate is actually blocked, by sending one
+The integration checks this setup when you enter the hostname.
 
 ### Afterwards
 
-- **Reconfigure** replaces the token or changes the hostname.
-- Repairs flags it if Cloudflare stops requiring client certificates on the
-  hostname, and can turn mTLS back on.
-- Devices that were already registered when you set up the integration are left
-  alone. Use **Issue certificate** to give one a certificate, or **Adopt
-  certificate** to register one you made in the Cloudflare dashboard.
+Devices that were already registered when you set up the integration are left
+alone. Use **Issue certificate** to give one a certificate, or **Adopt
+certificate** to register one you made in the Cloudflare dashboard.
 
 ## Actions
 
@@ -122,8 +92,7 @@ When you enter the hostname, the integration checks the setup and reports back:
 
 **Android:** open the downloaded `hass.p12`. If the phone won't install it from
 there, use Settings → Security & privacy → More security settings → Encryption &
-credentials → Install a certificate → **VPN & app user certificate**. The app asks
-which certificate to use the next time it connects.
+credentials → Install a certificate → **VPN & app user certificate**.
 
 **iOS:** import the `.p12` in the Home Assistant app's server settings (client
 certificate). iOS doesn't present the certificate for background requests, so

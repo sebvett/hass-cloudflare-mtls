@@ -1,21 +1,4 @@
-"""Cloudflare mTLS: a client certificate for every Home Assistant app install.
-
-The public hostname only lets through requests that present a client certificate
-from the account's Cloudflare-managed CA (enforced by a WAF rule in Cloudflare).
-This integration hands those certificates out and takes them back:
-
-  mobile_app entry added    -> ECDSA P-256 key generated here, certificate signed
-                               through the Cloudflare API, packed as a
-                               password-protected .p12, and a push notification to
-                               that device linking to a one-time download page
-  mobile_app entry removed  -> the device's certificate is revoked
-
-The download page only answers local client addresses (after reverse-proxy
-handling), refuses anything carrying Cloudflare headers, and expires after 24
-hours or 10 minutes after the download. Changes missed while the integration
-was not loaded are caught up at setup; if HA has no mobile_app entries at all,
-nothing is revoked.
-"""
+"""Cloudflare mTLS: a client certificate for every Home Assistant app install."""
 
 from __future__ import annotations
 
@@ -134,8 +117,6 @@ class CertManager:
         base = get_url(self.hass, allow_external=False, allow_cloud=False, prefer_external=False)
         return f"{base}{ENROLL_PATH}/{token}"
 
-    # --- reacting to app installs ---------------------------------------------
-
     async def async_seed(self) -> None:
         """On first setup, record the existing app installs without issuing anything."""
         if self.data["known"] is None:
@@ -188,8 +169,6 @@ class CertManager:
             await self.async_revoke(entry_id)
         except HomeAssistantError as err:
             _LOGGER.error("Revoking the certificate of removed app %s: %s", entry_id, err)
-
-    # --- certificates -----------------------------------------------------------
 
     async def async_issue(self, entry: ConfigEntry) -> str:
         """Issue a certificate for the app install, replacing any earlier one; return the link."""
@@ -259,8 +238,7 @@ class CertManager:
             service,
             {
                 "title": "Remote access certificate",
-                "message": "Tap to install the certificate for remote access. "
-                "The link only works on home Wi-Fi and expires in 24 hours.",
+                "message": "Only works on home Wi-Fi. Expires in 24 hours.",
                 "data": {
                     "clickAction": url,
                     "url": url,
@@ -271,8 +249,6 @@ class CertManager:
             blocking=True,
         )
         _LOGGER.info("Sent the certificate link to %s", entry.title)
-
-    # --- download links ---------------------------------------------------------
 
     def _drop_links(self, entry_id: str) -> None:
         for token in [t for t, link in self.data["links"].items() if link["entry_id"] == entry_id]:
@@ -304,7 +280,6 @@ a.btn{{display:block;text-align:center;background:var(--accent);color:#fff;text-
 ol{{padding-left:1.2rem}} li{{margin:6px 0}} small{{color:var(--muted)}}
 </style></head><body><main>
 <h1>Remote access for {title}</h1>
-<p>This certificate lets the Home Assistant app on this device connect from outside the house.</p>
 <div class="card"><small>Certificate password</small><code>{password}</code>
 <a class="btn" href="{token}/hass.p12" download="hass.p12">Download certificate</a></div>
 <div class="card"><strong>Android</strong><ol>

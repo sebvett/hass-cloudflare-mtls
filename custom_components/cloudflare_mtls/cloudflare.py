@@ -91,8 +91,6 @@ class CloudflareApi:
         # A missing resource (e.g. no WAF entrypoint yet) still proves read access
         return missing_ok and status == 404
 
-    # --- zones and capabilities ---------------------------------------------
-
     async def zones(self) -> list[dict[str, Any]]:
         return await self.call("GET", "/zones", params={"per_page": 50})
 
@@ -119,8 +117,6 @@ class CloudflareApi:
         if caps.can_restrict:
             caps.extras.append("API token management")
         return caps
-
-    # --- the token itself -----------------------------------------------------
 
     async def _own_token(self, account_id: str | None) -> tuple[str, str] | None:
         """Return (tokens endpoint, token id) for this token, user- or account-owned."""
@@ -171,8 +167,6 @@ class CloudflareApi:
                 body[key] = token[key]
         await self.call("PUT", f"{base}/{token_id}", json=body)
 
-    # --- client certificates ------------------------------------------------
-
     async def create_cert(self, zone_id: str, csr: str, days: int) -> dict[str, Any]:
         return await self.call("POST", f"/zones/{zone_id}/client_certificates", json={"csr": csr, "validity_days": days})
 
@@ -181,8 +175,6 @@ class CloudflareApi:
 
     async def revoke_cert(self, zone_id: str, cert_id: str) -> None:
         await self.call("DELETE", f"/zones/{zone_id}/client_certificates/{cert_id}")
-
-    # --- first-time setup ---------------------------------------------------
 
     async def mtls_hostnames(self, zone_id: str) -> list[str]:
         result = await self.call("GET", f"/zones/{zone_id}/certificate_authorities/hostname_associations")
