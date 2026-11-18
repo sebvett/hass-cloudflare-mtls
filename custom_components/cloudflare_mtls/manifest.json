@@ -1,0 +1,14 @@
+{
+  "domain": "cloudflare_mtls",
+  "name": "Cloudflare mTLS",
+  "codeowners": ["@sebvett"],
+  "config_flow": true,
+  "dependencies": ["http", "mobile_app", "notify"],
+  "documentation": "https://github.com/sebvett/hass-cloudflare-mtls",
+  "issue_tracker": "https://github.com/sebvett/hass-cloudflare-mtls/issues",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.0.0"
+}

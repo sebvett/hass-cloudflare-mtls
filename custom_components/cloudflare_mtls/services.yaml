@@ -1,0 +1,26 @@
+issue:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: mobile_app
+revoke:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: mobile_app
+adopt:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: mobile_app
+    certificate_id:
+      required: true
+      selector:
+        text:
+list:

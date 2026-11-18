@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Cloudflare client certificates",
+        "description": "Issue a client certificate to every Home Assistant app install and revoke it when the install is removed. Create a Cloudflare API token with the zone permission **SSL and Certificates: Edit** for the zone that serves Home Assistant.",
+        "data": {
+          "api_token": "API token",
+          "zone_id": "Zone ID"
+        },
+        "data_description": {
+          "api_token": "Cloudflare API token with SSL and Certificates: Edit on the zone.",
+          "zone_id": "Shown on the zone's Overview page in the Cloudflare dashboard."
+        }
+      },
+      "reconfigure": {
+        "title": "Cloudflare client certificates",
+        "description": "Replace the Cloudflare API token or zone.",
+        "data": {
+          "api_token": "API token",
+          "zone_id": "Zone ID"
+        },
+        "data_description": {
+          "api_token": "Cloudflare API token with SSL and Certificates: Edit on the zone.",
+          "zone_id": "Shown on the zone's Overview page in the Cloudflare dashboard."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the Cloudflare API.",
+      "invalid_auth": "Cloudflare rejected the token, or it cannot read client certificates for this zone."
+    },
+    "abort": {
+      "single_instance_allowed": "Already configured.",
+      "reconfigure_successful": "The new settings are saved."
+    }
+  },
+  "services": {
+    "issue": {
+      "name": "Issue certificate",
+      "description": "Issues a new client certificate for an app install, revokes its previous one and sends the device a download link (local network only).",
+      "fields": {
+        "device_id": {"name": "Device", "description": "A device registered by the Home Assistant app."}
+      }
+    },
+    "revoke": {
+      "name": "Revoke certificate",
+      "description": "Revokes the client certificate of an app install.",
+      "fields": {
+        "device_id": {"name": "Device", "description": "A device registered by the Home Assistant app."}
+      }
+    },
+    "adopt": {
+      "name": "Adopt certificate",
+      "description": "Records a client certificate created elsewhere, such as in the Cloudflare dashboard, as this device's, so it is revoked when the device is removed.",
+      "fields": {
+        "device_id": {"name": "Device", "description": "A device registered by the Home Assistant app."},
+        "certificate_id": {"name": "Certificate ID", "description": "The certificate's ID in Cloudflare."}
+      }
+    },
+    "list": {
+      "name": "List certificates",
+      "description": "Lists app installs with their certificate and any pending download links."
+    }
+  }
+}
