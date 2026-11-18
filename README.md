@@ -39,22 +39,6 @@ device. Nobody else has to re-enrol. Home Assistant's own login still applies on
 - Home Assistant configured to trust your reverse proxy (Settings → System →
   Network: *Trust X-Forwarded-For* and *Trusted proxies*)
 
-## Cloudflare setup
-
-1. **Enable mTLS for the hostname**: SSL/TLS → Client Certificates → Hosts → add
-   the hostname Home Assistant is served on.
-2. **Block requests without a valid certificate**: Security → WAF → Custom rules →
-   action *Block*:
-
-   ```
-   (http.host eq "ha.example.com" and (not cf.tls_client_auth.cert_verified or cf.tls_client_auth.cert_revoked))
-   ```
-
-   `cert_verified` stays true for revoked certificates, so keep the `cert_revoked`
-   check. It's also worth blocking `/api/mcp` here if you use Home Assistant's MCP server.
-3. **Create an API token**: My Profile → API Tokens → Create token → Custom token,
-   permission **Zone → SSL and Certificates → Edit**, limited to your zone.
-
 ## Installation
 
 **Marketplace / HACS (custom repository):** add
@@ -64,14 +48,66 @@ device. Nobody else has to re-enrol. Home Assistant's own login still applies on
 **Manual:** copy `custom_components/cloudflare_mtls` into your Home Assistant
 `config/custom_components/` folder and restart.
 
-Then add it under Settings → Devices & services → Add integration →
-**Cloudflare mTLS**, and enter the API token and the zone ID (shown on the zone's
-Overview page). The token is checked before it's saved, and can be replaced later
-with **Reconfigure**.
+## Setup
 
-Devices that were already registered when you set up the integration are left
-alone. Use the **Issue certificate** action to give one a certificate, or **Adopt
-certificate** to register one you made in the Cloudflare dashboard.
+Add the integration under Settings → Devices & services → Add integration →
+**Cloudflare mTLS** and paste a Cloudflare API token. The integration checks what
+the token can do, picks one of two setups, and tells you which one it chose. If the
+token can see more than one zone, it asks which zone to use first.
+
+### Automatic: paste a broad token
+
+Use a token with broad access, for example one with all permissions on the account.
+At a minimum it needs **SSL and Certificates: Edit**, **Firewall Services: Edit**
+and **Zone: Read**; the setup dialog links to a pre-filled token form. Add **DNS:
+Edit** and **Cloudflare Tunnel: Edit** for the tunnel route, and **API Tokens:
+Edit** so the token can restrict itself.
+
+You choose the hostname (`hass.<zone>` is suggested) and, if the token can see your
+remotely managed tunnels, which tunnel should route it. The integration then:
+
+1. requires client certificates on the hostname (mTLS with the Cloudflare-managed CA)
+2. adds a WAF custom rule that blocks requests without a valid, unrevoked
+   certificate, and optionally Home Assistant's `/api/mcp` on that hostname
+3. adds the hostname to the tunnel's public hostnames and creates its DNS record
+   (an existing DNS record is never changed)
+4. **restricts its own token** to **SSL and Certificates: Edit** on that zone. The
+   token value stays the same, so nothing else needs updating.
+
+If the token isn't allowed to edit itself, **Repairs** asks you to swap it for a
+restricted one afterwards. The repair links to a pre-filled token form and checks
+that the new token really is restricted.
+
+### Manual: set up Cloudflare yourself
+
+Use a token with only **SSL and Certificates: Edit** on the zone, and set up
+Cloudflare by hand:
+
+1. Route the hostname to Home Assistant (for example as a tunnel public hostname).
+2. SSL/TLS → Client Certificates → Hosts: add the hostname.
+3. Security → WAF → Custom rules: add a rule with action *Block*:
+
+   ```
+   (http.host eq "hass.example.com" and (not cf.tls_client_auth.cert_verified or cf.tls_client_auth.cert_revoked))
+   ```
+
+   `cert_verified` stays true for revoked certificates, so keep the `cert_revoked`
+   check. Without the rule, mTLS alone doesn't block anything.
+
+When you enter the hostname, the integration checks the setup and reports back:
+
+- whether client certificates are required on the hostname (it turns this on if they
+  aren't, which the restricted token is allowed to do)
+- whether a request without a certificate is actually blocked, by sending one
+
+### Afterwards
+
+- **Reconfigure** replaces the token or changes the hostname.
+- Repairs flags it if Cloudflare stops requiring client certificates on the
+  hostname, and can turn mTLS back on.
+- Devices that were already registered when you set up the integration are left
+  alone. Use **Issue certificate** to give one a certificate, or **Adopt
+  certificate** to register one you made in the Cloudflare dashboard.
 
 ## Actions
 

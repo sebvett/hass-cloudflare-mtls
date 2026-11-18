@@ -50,7 +50,7 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import config_validation as cv, device_registry as dr, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_time_interval
@@ -60,14 +60,19 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import slugify
 from homeassistant.util.network import is_local
 
+from .cloudflare import CloudflareApi, CloudflareError, restricted_token_url
 from .const import (
     CERT_DAYS,
-    CF_API,
+    CONF_ACCOUNT_ID,
     CONF_API_TOKEN,
+    CONF_HOSTNAME,
     CONF_ZONE_ID,
+    CONF_ZONE_NAME,
     DOMAIN,
     DOWNLOAD_GRACE,
     ENROLL_PATH,
+    ISSUE_BROAD_TOKEN,
+    ISSUE_MTLS_OFF,
     LINK_TTL,
     NOTIFY_WAIT,
 )
@@ -108,8 +113,8 @@ class CertManager:
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._url = CF_API.format(zone=entry.data[CONF_ZONE_ID])
-        self._headers = {"Authorization": f"Bearer {entry.data[CONF_API_TOKEN]}"}
+        self.api = CloudflareApi(async_get_clientsession(hass), entry.data[CONF_API_TOKEN])
+        self.zone_id = entry.data[CONF_ZONE_ID]
         self._store: Store[dict[str, Any]] = Store(hass, 1, DOMAIN)
         # known: mobile_app entry ids seen; certs: entry id -> cert; links: token -> pending download
         self.data: dict[str, Any] = {"known": None, "certs": {}, "links": {}}
@@ -121,14 +126,6 @@ class CertManager:
 
     async def _save(self) -> None:
         await self._store.async_save(self.data)
-
-    async def _cf(self, method: str, path: str = "", json: dict | None = None) -> dict[str, Any]:
-        session = async_get_clientsession(self.hass)
-        async with session.request(method, self._url + path, json=json, headers=self._headers) as resp:
-            body = await resp.json(content_type=None)
-        if not body or not body.get("success"):
-            raise HomeAssistantError(f"Cloudflare {method} {path or '/'} failed: {body and body.get('errors')}")
-        return body["result"]
 
     def mobile_entries(self) -> dict[str, ConfigEntry]:
         return {e.entry_id: e for e in self.hass.config_entries.async_entries("mobile_app")}
@@ -199,7 +196,7 @@ class CertManager:
         eid, title = entry.entry_id, entry.title
         async with self._lock:
             key, csr = await self.hass.async_add_executor_job(_make_csr, f"hass {title[:32]} {eid[-8:]}")
-            res = await self._cf("POST", json={"csr": csr, "validity_days": CERT_DAYS})
+            res = await self.api.create_cert(self.zone_id, csr, CERT_DAYS)
             password = "-".join(secrets.token_hex(2) for _ in range(4))
             p12 = await self.hass.async_add_executor_job(
                 _make_p12, key, res["certificate"], f"Home Assistant ({title})", password
@@ -220,7 +217,7 @@ class CertManager:
         self.hass.async_create_background_task(self._async_notify(entry, token), f"{DOMAIN} notify {title}")
         if old:
             try:
-                await self._cf("DELETE", f"/{old['cf_id']}")
+                await self.api.revoke_cert(self.zone_id, old["cf_id"])
             except HomeAssistantError as err:
                 _LOGGER.error("Revoke the replaced certificate %s in Cloudflare: %s", old["cf_id"], err)
         return self.link_url(token)
@@ -229,7 +226,7 @@ class CertManager:
         async with self._lock:
             if not (cert := self.data["certs"].get(entry_id)):
                 return False
-            await self._cf("DELETE", f"/{cert['cf_id']}")
+            await self.api.revoke_cert(self.zone_id, cert["cf_id"])
             del self.data["certs"][entry_id]
             self._drop_links(entry_id)
             await self._save()
@@ -238,7 +235,7 @@ class CertManager:
 
     async def async_adopt(self, entry: ConfigEntry, cert_id: str) -> None:
         """Record a certificate made elsewhere (e.g. in the dashboard) as this device's."""
-        cert = await self._cf("GET", f"/{cert_id}")
+        cert = await self.api.get_cert(self.zone_id, cert_id)
         if cert["status"] != "active":
             raise ServiceValidationError(f"Certificate {cert_id} is {cert['status']}")
         async with self._lock:
@@ -372,6 +369,54 @@ def _entry_for_device(hass: HomeAssistant, device_id: str) -> ConfigEntry:
     raise ServiceValidationError("Pick a device registered by the Home Assistant app")
 
 
+async def async_check_cloudflare(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Raise repair issues for a token broader than needed and a hostname without mTLS."""
+    api = CloudflareApi(async_get_clientsession(hass), entry.data[CONF_API_TOKEN])
+    zone_id = entry.data[CONF_ZONE_ID]
+    try:
+        zones = await api.zones()
+        if not entry.data.get(CONF_ACCOUNT_ID) and (zone := next((z for z in zones if z["id"] == zone_id), None)):
+            # Entries made before 1.1 only stored the zone ID
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_ACCOUNT_ID: zone["account"]["id"], CONF_ZONE_NAME: zone["name"]}
+            )
+        caps = await api.capabilities(zone_id, entry.data.get(CONF_ACCOUNT_ID), len(zones))
+    except CloudflareError as err:
+        _LOGGER.warning("Checking the Cloudflare token: %s", err)
+        return
+    if caps.broad:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            ISSUE_BROAD_TOKEN,
+            is_fixable=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_BROAD_TOKEN,
+            translation_placeholders={
+                "extras": ", ".join(caps.extras),
+                "url": restricted_token_url(entry.data.get(CONF_ACCOUNT_ID), zone_id),
+            },
+            data={"entry_id": entry.entry_id},
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, ISSUE_BROAD_TOKEN)
+
+    host = entry.data.get(CONF_HOSTNAME)
+    if host and caps.hosts and host not in await api.mtls_hostnames(zone_id):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            ISSUE_MTLS_OFF,
+            is_fixable=True,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=ISSUE_MTLS_OFF,
+            translation_placeholders={"host": host},
+            data={"entry_id": entry.entry_id},
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, ISSUE_MTLS_OFF)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = CertManager(hass, entry)
     await manager.async_load()
@@ -380,6 +425,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_CONFIG_ENTRY_CHANGED, manager.async_entry_changed))
     entry.async_on_unload(async_track_time_interval(hass, manager.async_expire_links, timedelta(hours=1)))
     entry.async_create_background_task(hass, manager.async_catch_up(), f"{DOMAIN} catch up")
+    entry.async_create_background_task(hass, async_check_cloudflare(hass, entry), f"{DOMAIN} check token")
 
     if not hass.data.get(f"{DOMAIN}_view"):  # views can't be unregistered; it answers 404 while unloaded
         hass.http.register_view(EnrollView())

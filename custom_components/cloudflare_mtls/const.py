@@ -4,8 +4,10 @@ DOMAIN = "cloudflare_mtls"
 
 CONF_API_TOKEN = "api_token"
 CONF_ZONE_ID = "zone_id"
+CONF_ZONE_NAME = "zone_name"
+CONF_ACCOUNT_ID = "account_id"
+CONF_HOSTNAME = "hostname"
 
-CF_API = "https://api.cloudflare.com/client/v4/zones/{zone}/client_certificates"
 CERT_DAYS = 3650
 
 LINK_TTL = 24 * 3600
@@ -15,3 +17,6 @@ DOWNLOAD_GRACE = 600
 NOTIFY_WAIT = 360
 
 ENROLL_PATH = "/api/cloudflare_mtls/enroll"
+
+ISSUE_BROAD_TOKEN = "broad_token"
+ISSUE_MTLS_OFF = "mtls_not_enabled"
